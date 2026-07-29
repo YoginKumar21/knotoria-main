@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "emulators": "firebase emulators:start --only auth,firestore"
+  },
+  "dependencies": {
+    "firebase": "^12.15.0"
+  }
+}

@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && 
+        (request.auth.token.admin == true ||
+         request.auth.token.email.matches('(?i)admin@knotoria\\.com') || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+    }
+
+    // Carts Collection
+    match /carts/{userId} {
+      // Admin does NOT have access to carts
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Orders Collection
+    match /orders/{orderId} {
+      // Anyone can create an order (supports guest checkout)
+      allow create: if true;
+      // Customers can only read their own orders; admins can read all orders
+      allow read: if request.auth != null && (
+        resource.data.user_uid == request.auth.uid || 
+        resource.data.userId == request.auth.uid || 
+        isAdmin()
+      );
+      // Customers cannot edit/update or delete orders after creation; only admins can
+      allow update, delete: if isAdmin();
+    }
+
+    // Products Collection
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      // Product Reviews Subcollection
+      match /reviews/{reviewId} {
+        allow read: if true;
+        // Any authenticated user can create a review on their own behalf
+        allow create: if request.auth != null && request.resource.data.user_uid == request.auth.uid;
+        // No one can edit another user's review; authors can update their own
+        allow update: if request.auth != null && 
+          resource.data.user_uid == request.auth.uid && 
+          request.resource.data.user_uid == request.auth.uid;
+        // Only the review's author OR an admin can delete it
+        allow delete: if request.auth != null && (
+          resource.data.user_uid == request.auth.uid || 
+          isAdmin()
+        );
+      }
+    }
+
+    // Categories Collection
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admin-only Collections (Internal audits, logs, budget reports)
+    match /inventory_logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+    match /budget_reports/{reportId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Default deny-all fallback rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

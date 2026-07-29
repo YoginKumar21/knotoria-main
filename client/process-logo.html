@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Logo Processor</title>
+</head>
+<body>
+  <h1>Processing Logo...</h1>
+  <canvas id="canvas"></canvas>
+  <div id="result" style="word-break: break-all; font-family: monospace;"></div>
+
+  <script>
+    const img = new Image();
+    img.src = '/knotoria-logo.png';
+    img.onload = () => {
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+
+      const imgData = ctx.getImageData(0, 0, img.width, img.height);
+      const data = imgData.data;
+
+      // Find the bounding box of non-background pixels
+      // Background is cream/white (R > 230 && G > 220 && B > 200)
+      let minX = img.width;
+      let minY = img.height;
+      let maxX = 0;
+      let maxY = 0;
+
+      for (let y = 0; y < img.height; y++) {
+        for (let x = 0; x < img.width; x++) {
+          const idx = (y * img.width + x) * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const a = data[idx + 3];
+
+          // Check if pixel is NOT the cream/white background
+          const isBackground = r > 235 && g > 230 && b > 215;
+          if (!isBackground && a > 10) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      // Add a small 4px padding around the cropped bounding box
+      const padding = 6;
+      minX = Math.max(0, minX - padding);
+      minY = Math.max(0, minY - padding);
+      maxX = Math.min(img.width - 1, maxX + padding);
+      maxY = Math.min(img.height - 1, maxY + padding);
+
+      const cropWidth = maxX - minX + 1;
+      const cropHeight = maxY - minY + 1;
+
+      // Create cropped canvas
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = cropWidth;
+      croppedCanvas.height = cropHeight;
+      const croppedCtx = croppedCanvas.getContext('2d');
+
+      // Get the image data for the cropped region
+      const croppedData = ctx.getImageData(minX, minY, cropWidth, cropHeight);
+      const cData = croppedData.data;
+
+      // Make cream/white pixels transparent
+      for (let i = 0; i < cData.length; i += 4) {
+        const r = cData[i];
+        const g = cData[i + 1];
+        const b = cData[i + 2];
+        const isBackground = r > 235 && g > 230 && b > 215;
+        if (isBackground) {
+          cData[i + 3] = 0; // Alpha = 0 (fully transparent)
+        }
+      }
+
+      croppedCtx.putImageData(croppedData, 0, 0);
+
+      // Output base64 PNG
+      const base64Png = croppedCanvas.toDataURL('image/png');
+      document.getElementById('result').innerText = base64Png;
+      console.log('Done!');
+    };
+  </script>
+</body>
+</html>
