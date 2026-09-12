@@ -1,8 +1,11 @@
 {
   "scripts": {
-    "emulators": "firebase emulators:start --only auth,firestore"
+    "emulators": "firebase emulators:start --only auth,firestore",
+    "build:client": "npm --prefix client run build",
+    "deploy:hosting": "npm run build:client && firebase deploy --only hosting"
   },
   "dependencies": {
     "firebase": "^12.15.0"
   }
 }
+

@@ -4,3 +4,6 @@ dist/
 *.db
 .DS_Store
 firebase-key.json
+
+# Local Netlify folder
+.netlify

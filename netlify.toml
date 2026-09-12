@@ -1,0 +1,5 @@
+[build]
+  # Navigate to client directory, install dependencies, and build
+  command = "cd client && npm install && npm run build"
+  # Specify the publish directory relative to the repository root
+  publish = "client/dist"

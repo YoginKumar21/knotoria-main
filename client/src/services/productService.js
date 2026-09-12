@@ -332,34 +332,71 @@ export const getOrders = async () => {
 
 export const getUserOrders = async (userUid) => {
   try {
-    const q = query(collection(db, "orders"), where("user_uid", "==", userUid));
-    const snapshot = await getDocs(q);
+    // 1. Attempt server API call first
+    try {
+      const baseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/orders?userId=${userUid}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) return data;
+      }
+    } catch (apiErr) {
+      console.warn("API fetch user orders failed, falling back to direct Firestore:", apiErr);
+    }
 
-    const productsSnapshot = await getDocs(collection(db, "products"));
-    const productMap = {};
-    productsSnapshot.docs.forEach(doc => {
-      productMap[doc.id] = doc.data();
-    });
+    // 2. Direct Firestore fallback (checking both user_uid and userId)
+    const q1 = query(collection(db, "orders"), where("user_uid", "==", userUid));
+    const q2 = query(collection(db, "orders"), where("userId", "==", userUid));
 
-    const categoriesSnapshot = await getDocs(collection(db, "categories"));
-    const categoryMap = {};
-    categoriesSnapshot.docs.forEach(doc => {
-      categoryMap[doc.id] = doc.data();
-    });
+    const [snap1, snap2] = await Promise.all([
+      getDocs(q1).catch(() => ({ docs: [] })),
+      getDocs(q2).catch(() => ({ docs: [] }))
+    ]);
 
-    const orders = snapshot.docs.map(doc => {
+    const docMap = new Map();
+    if (snap1.docs) snap1.docs.forEach(doc => docMap.set(doc.id, doc));
+    if (snap2.docs) snap2.docs.forEach(doc => docMap.set(doc.id, doc));
+    const combinedDocs = Array.from(docMap.values());
+
+    let productMap = {};
+    try {
+      const productsSnapshot = await getDocs(collection(db, "products"));
+      productsSnapshot.docs.forEach(doc => {
+        productMap[doc.id] = doc.data();
+      });
+    } catch (e) {
+      console.warn("Could not fetch products for order mapping:", e);
+    }
+
+    let categoryMap = {};
+    try {
+      const categoriesSnapshot = await getDocs(collection(db, "categories"));
+      categoriesSnapshot.docs.forEach(doc => {
+        categoryMap[doc.id] = doc.data();
+      });
+    } catch (e) {
+      console.warn("Could not fetch categories for order mapping:", e);
+    }
+
+    const orders = combinedDocs.map(doc => {
       const data = doc.data();
       const items = (data.items || []).map((item, index) => {
-        const product = productMap[item.product_id] || {};
-        const category = categoryMap[product.category_id] || {};
+        const pId = item.productId || item.product_id;
+        const product = productMap[pId] || {};
+        const cId = product.category_id || product.categoryId;
+        const category = categoryMap[cId] || {};
+        const price = item.price !== undefined ? item.price : item.price_at_order;
+
         return {
           id: `${doc.id}_item_${index}`,
           order_id: doc.id,
-          product_id: item.product_id,
+          product_id: pId,
+          productId: pId,
           quantity: item.quantity,
-          price_at_order: item.price_at_order,
-          product_name: product.name || "Unknown Product",
-          product_image_url: product.image_url || "",
+          price_at_order: price,
+          price: price,
+          product_name: item.name || product.name || "Unknown Product",
+          product_image_url: product.image_url || product.imageUrls?.[0]?.url || "",
           category_name: category.name || ""
         };
       });
@@ -372,8 +409,8 @@ export const getUserOrders = async (userUid) => {
     });
 
     orders.sort((a, b) => {
-      const dateA = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.created_at || 0);
-      const dateB = b.created_at?.toDate ? b.created_at.toDate() : new Date(b.created_at || 0);
+      const dateA = a.created_at?.toDate ? a.created_at.toDate() : new Date(a.createdAt || a.created_at || 0);
+      const dateB = b.created_at?.toDate ? b.created_at.toDate() : new Date(b.createdAt || b.created_at || 0);
       return dateB - dateA;
     });
 
@@ -386,7 +423,7 @@ export const getUserOrders = async (userUid) => {
 
 export const placeOrder = async (orderData) => {
   try {
-    const baseUrl = import.meta.env.VITE_API_URL || "";
+    const baseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
     const response = await fetch(`${baseUrl}/api/orders`, {
       method: "POST",
       headers: {

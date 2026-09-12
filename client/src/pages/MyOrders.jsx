@@ -29,8 +29,15 @@ export default function MyOrders() {
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case "completed":
+      case "delivered":
         return "bg-sage/10 text-sage border-sage/20";
+      case "shipped":
+        return "bg-indigo-50 text-indigo-700 border-indigo-200";
+      case "accepted":
+      case "processing":
+        return "bg-blue-50 text-blue-700 border-blue-200";
       case "cancelled":
+      case "rejected":
         return "bg-red-50 text-red-700 border-red-200";
       case "pending":
       default:

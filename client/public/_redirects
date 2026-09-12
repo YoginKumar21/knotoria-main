@@ -1,1 +1,5 @@
-/*    /index.html   200
+# Proxy /api requests to Render backend (Replace with your actual Render service URL)
+/api/* https://knotoria-main.onrender.com
+
+# React Router SPA routing fallback
+/*      /index.html                                             200

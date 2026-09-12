@@ -124,6 +124,7 @@ router.post("/", async (req, res) => {
 
       transaction.set(orderRef, {
         userId: resolvedUserId,
+        user_uid: resolvedUserId,
         status: "pending",
         totalAmount,
         items: orderItems,
@@ -160,15 +161,22 @@ router.get("/", async (req, res) => {
   const resolvedUserId = userId !== undefined ? userId : user_uid;
 
   try {
-    let queryRef = db.collection("orders");
-    
+    let docs = [];
+
     if (resolvedUserId) {
-      // Filter by user ID if provided
-      queryRef = queryRef.where("userId", "==", resolvedUserId);
+      // Filter by user ID (checking both userId and user_uid fields for backward compatibility)
+      const snap1 = await db.collection("orders").where("userId", "==", resolvedUserId).get();
+      const snap2 = await db.collection("orders").where("user_uid", "==", resolvedUserId).get();
+      const docMap = new Map();
+      snap1.docs.forEach(doc => docMap.set(doc.id, doc));
+      snap2.docs.forEach(doc => docMap.set(doc.id, doc));
+      docs = Array.from(docMap.values());
+    } else {
+      const snapshot = await db.collection("orders").get();
+      docs = snapshot.docs;
     }
 
-    const snapshot = await queryRef.get();
-    let resolvedOrders = await resolveOrdersDetails(snapshot.docs);
+    let resolvedOrders = await resolveOrdersDetails(docs);
 
     // Sort by createdAt DESC
     resolvedOrders.sort((a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0));
@@ -184,7 +192,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  const validStatuses = ["pending", "processing", "shipped", "delivered", "cancelled"];
+  const validStatuses = ["pending", "processing", "accepted", "rejected", "shipped", "delivered", "cancelled"];
   if (!status || !validStatuses.includes(status)) {
     return res.status(400).json({ error: `Invalid status. Choose from: ${validStatuses.join(", ")}` });
   }
