@@ -471,6 +471,71 @@ export const updateOrderStatus = async (id, status) => {
   }
 };
 
+export const updateOrderAddress = async (id, address, userUid) => {
+  try {
+    const baseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+    try {
+      const response = await fetch(`${baseUrl}/api/orders/${id}/address`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userUid, address }),
+      });
+      const result = await response.json();
+      if (response.ok) return result;
+      throw new Error(result.error || "Failed to update address via server API.");
+    } catch (apiErr) {
+      console.warn("API address update failed, falling back to direct Firestore update:", apiErr);
+    }
+
+    const orderRef = doc(db, "orders", id);
+    const updatedAddress = {
+      email: address.email || "",
+      phone: address.phone || "",
+      street: address.street || "",
+      city: address.city || "",
+      postalCode: address.postalCode || ""
+    };
+    await updateDoc(orderRef, {
+      address: updatedAddress,
+      customer_address: `${updatedAddress.street}, ${updatedAddress.city} - ${updatedAddress.postalCode}`,
+      customer_phone: updatedAddress.phone,
+      updatedAt: serverTimestamp()
+    });
+    return { success: true, message: "Delivery address updated successfully.", address: updatedAddress };
+  } catch (error) {
+    console.error(`Error updating order address for ${id}:`, error);
+    throw error;
+  }
+};
+
+export const cancelOrder = async (id, userUid) => {
+  try {
+    const baseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+    try {
+      const response = await fetch(`${baseUrl}/api/orders/${id}/cancel`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userUid }),
+      });
+      const result = await response.json();
+      if (response.ok) return result;
+      throw new Error(result.error || "Failed to cancel order via server API.");
+    } catch (apiErr) {
+      console.warn("API order cancellation failed, falling back to direct Firestore update:", apiErr);
+    }
+
+    const orderRef = doc(db, "orders", id);
+    await updateDoc(orderRef, {
+      status: "cancelled",
+      updatedAt: serverTimestamp()
+    });
+    return { success: true, message: "Order has been cancelled successfully." };
+  } catch (error) {
+    console.error(`Error cancelling order ${id}:`, error);
+    throw error;
+  }
+};
+
 export const deleteOrder = async (id) => {
   try {
     const orderRef = doc(db, "orders", id);

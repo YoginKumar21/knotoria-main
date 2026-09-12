@@ -16,6 +16,8 @@ export const api = {
   getOrders: (token) => productService.getOrders(),
   getUserOrders: (uid) => productService.getUserOrders(uid),
   updateOrderStatus: (token, id, status) => productService.updateOrderStatus(id, status),
+  updateOrderAddress: (id, address, uid) => productService.updateOrderAddress(id, address, uid),
+  cancelOrder: (id, uid) => productService.cancelOrder(id, uid),
   deleteOrder: (token, id) => productService.deleteOrder(id),
 
   // Reviews

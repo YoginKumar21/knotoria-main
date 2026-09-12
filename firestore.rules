@@ -31,8 +31,13 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid || 
         isAdmin()
       );
-      // Customers cannot edit/update or delete orders after creation; only admins can
-      allow update, delete: if isAdmin();
+      // Customers can update address or cancel order if status is pending, processing, or accepted; admins can update any
+      allow update: if isAdmin() || (
+        request.auth != null && 
+        (resource.data.user_uid == request.auth.uid || resource.data.userId == request.auth.uid) &&
+        (resource.data.status == 'pending' || resource.data.status == 'processing' || resource.data.status == 'accepted')
+      );
+      allow delete: if isAdmin();
     }
 
     // Products Collection

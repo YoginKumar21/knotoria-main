@@ -222,6 +222,94 @@ router.patch("/:id", requireAuth, async (req, res) => {
   }
 });
 
+// PATCH /api/orders/:id/address - customer route to update shipping address while order is pending/processing
+router.patch("/:id/address", async (req, res) => {
+  const { id } = req.params;
+  const { userId, user_uid, address } = req.body;
+  const resolvedUserId = userId !== undefined ? userId : user_uid;
+
+  if (!address || !address.street || !address.phone) {
+    return res.status(400).json({ error: "Street and phone number are required to update address." });
+  }
+
+  try {
+    const orderRef = db.collection("orders").doc(id);
+    const doc = await orderRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+
+    const orderData = doc.data();
+
+    // Verify ownership if user ID provided
+    if (resolvedUserId && orderData.userId && orderData.userId !== resolvedUserId && orderData.user_uid !== resolvedUserId) {
+      return res.status(403).json({ error: "You are not authorized to modify this order." });
+    }
+
+    const modifiableStatuses = ["pending", "accepted", "processing"];
+    if (!modifiableStatuses.includes(orderData.status?.toLowerCase())) {
+      return res.status(400).json({ error: "Cannot edit delivery address once the order is shipped or completed." });
+    }
+
+    const updatedAddress = {
+      email: address.email || orderData.address?.email || "",
+      phone: address.phone || orderData.address?.phone || "",
+      street: address.street || orderData.address?.street || "",
+      city: address.city || orderData.address?.city || "",
+      postalCode: address.postalCode || orderData.address?.postalCode || ""
+    };
+
+    await orderRef.update({
+      address: updatedAddress,
+      customer_address: `${updatedAddress.street}, ${updatedAddress.city} - ${updatedAddress.postalCode}`,
+      customer_phone: updatedAddress.phone,
+      updatedAt: new Date().toISOString()
+    });
+
+    res.json({ success: true, message: "Delivery address updated successfully.", address: updatedAddress });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update address: " + err.message });
+  }
+});
+
+// PATCH /api/orders/:id/cancel - customer route to cancel order while order is pending/processing
+router.patch("/:id/cancel", async (req, res) => {
+  const { id } = req.params;
+  const { userId, user_uid } = req.body;
+  const resolvedUserId = userId !== undefined ? userId : user_uid;
+
+  try {
+    const orderRef = db.collection("orders").doc(id);
+    const doc = await orderRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+
+    const orderData = doc.data();
+
+    // Verify ownership if user ID provided
+    if (resolvedUserId && orderData.userId && orderData.userId !== resolvedUserId && orderData.user_uid !== resolvedUserId) {
+      return res.status(403).json({ error: "You are not authorized to cancel this order." });
+    }
+
+    const modifiableStatuses = ["pending", "accepted", "processing"];
+    if (!modifiableStatuses.includes(orderData.status?.toLowerCase())) {
+      return res.status(400).json({ error: "Cannot cancel order once it has been shipped or completed." });
+    }
+
+    await orderRef.update({
+      status: "cancelled",
+      updatedAt: new Date().toISOString()
+    });
+
+    res.json({ success: true, message: "Order has been cancelled successfully." });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to cancel order: " + err.message });
+  }
+});
+
 // DELETE /api/orders/:id - admin only, deletes order record
 router.delete("/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
